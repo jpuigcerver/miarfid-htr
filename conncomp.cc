@@ -1,3 +1,4 @@
+/* Author: joapuipe@upv.es */
 #include <glog/logging.h>
 #include <google/gflags.h>
 #include <Magick++.h>
