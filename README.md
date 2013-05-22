@@ -28,6 +28,7 @@ disadvantages:
   - Even if there is only one foreground component, the color difference
     between the background (0) and the component (1) is indistinguishable to
     the human eye.
+
 Thus, I changed the output so that it uses color 0 for the background and only
 a desired maximum number of colors for the foreground components (10 by
 default). Anyway, if you want to get the output as the statement specified,
