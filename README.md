@@ -26,12 +26,13 @@ disadvantages:
   - It may happen that there are more than 255 foreground components, so we
     would need more than the default 1-byte per pixel.
   - Even if there is only one foreground component, the color difference
-    between the background (0) and the component (1) is indistinguishable to the
-    human eye.
+    between the background (0) and the component (1) is indistinguishable to
+    the human eye.
 Thus, I changed the output so that it uses color 0 for the background and only
-a desired maximum number of colors for the foreground components (10 by default).
-Anyway, if you want to get the output as the statement specified, you can pass
-the -s option to the program.
+a desired maximum number of colors for the foreground components (10 by
+default). Anyway, if you want to get the output as the statement specified,
+you can pass the -s option to the program. Additionally, one can use the -h
+option to print the strict output as plain text to the standard output.
 
 Here is the list of relevant options that can be passed to the program:
 ```
