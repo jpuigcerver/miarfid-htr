@@ -2,16 +2,18 @@
 #include <google/gflags.h>
 #include <Magick++.h>
 #include <stdio.h>
-#include <iostream>
+
 DEFINE_string(i, "-", "Input image. Use '-' for standard input");
 DEFINE_string(o, "-", "Output image. Use '-' for standard output");
+DEFINE_double(b, 1.0f, "Background color");
 DEFINE_bool(c8, false, "Use eight-neighbors connectivity");
 DEFINE_bool(h, false, "Output the components map in a human-readable way");
 DEFINE_bool(s, false,
             "Output painted using the strict definition on the statement");
+DEFINE_bool(m, false,
+            "Output one image for each component. Use -o as preffix.");
 DEFINE_uint64(
     nc, 10, "Number of colors to use to paint the connected components");
-DEFINE_double(b, 1.0f, "Background color");
 
 class MFSet {
  public:
@@ -49,7 +51,8 @@ class MFSet {
 
 void output(
     const Magick::Image& i_img, const MFSet& mfset,
-    const std::map<size_t,size_t>& fg_comp, Magick::Image& o_img) {
+    const std::map<size_t,size_t>& fg_comp,
+    std::vector<Magick::Image*>& comp_i) {
   const size_t H = i_img.rows();
   const size_t W = i_img.columns();
   const float c_r = 1.0f / FLAGS_nc;
@@ -63,10 +66,17 @@ void output(
         CHECK(it != fg_comp.end())
             << "Pixel " << i << " is not inside a foreground component";
         const float c = (1.0f + it->second % FLAGS_nc) * c_r;
-        o_img.pixelColor(x, y, Magick::ColorGray(c));
+        if (!FLAGS_m) {
+          comp_i[0]->pixelColor(x, y, Magick::ColorGray(c));
+        } else {
+          comp_i[it->second]->pixelColor(
+              x, y, Magick::ColorGray(1.0f - FLAGS_b));
+        }
         if (FLAGS_h) { printf("%*lu ", D, it->second + 1); }
       } else {
-        o_img.pixelColor(x, y, Magick::ColorGray(0.0f));
+        if (!FLAGS_m) {
+          comp_i[0]->pixelColor(x, y, Magick::ColorGray(0.0f));
+        }
         if (FLAGS_h) { printf("%*d ", D, 0); }
       }
     }
@@ -81,6 +91,26 @@ int main(int argc, char** argv) {
   google::ParseCommandLineFlags(&argc, &argv, true);
   // Initialize Image Magick
   Magick::InitializeMagick(*argv);
+  // Check arguments
+  if (FLAGS_b > 1.0f) {
+    LOG(WARNING) <<
+        "Invalid background color. Using -b 1.";
+    FLAGS_b = 1.0f;
+  }
+  else if (FLAGS_b < 0.0f) {
+    LOG(WARNING) <<
+        "Invalid background color. Using -b 0.";
+    FLAGS_b = 0.0f;
+  }
+  if (FLAGS_nc < 1) {
+    LOG(WARNING) <<
+        "Invalid number of colors for the connected components. Using -nc 1.";
+    FLAGS_nc = 1;
+  }
+  if (FLAGS_m && FLAGS_o == "-") {
+    LOG(ERROR) << "Expected output prefix name. Use -o <prefix>.";
+    return 1;
+  }
   // Load input image
   Magick::Image i_img;
   try {
@@ -173,7 +203,7 @@ int main(int argc, char** argv) {
   }
   // Check if the number of connected components is too big for
   // gray-level output image
-  if (fg_comp.size() > 255) {
+  if (fg_comp.size() > FLAGS_nc) {
     LOG(WARNING) <<
         "The number of connected components is too big (" << fg_comp.size() << "). "
         "Different components will have the same color representation.";
@@ -185,13 +215,23 @@ int main(int argc, char** argv) {
     FLAGS_nc = fg_comp.size();
   }
   try {
-    // Prepare output image
-    Magick::Image o_img(i_img.size(), Magick::ColorGray(FLAGS_b));
-    o_img.type(Magick::GrayscaleType);
-    o_img.modifyImage();
-    output(i_img, mfset, fg_comp, o_img);
-    o_img.quantizeColors(256);
-    o_img.write(FLAGS_o);
+    // Create output images
+    std::vector<Magick::Image*> o_imgs(FLAGS_m ? fg_comp.size() : 1);
+    for (size_t i = 0; i < o_imgs.size(); ++i) {
+      o_imgs[i] = new Magick::Image(i_img.size(), Magick::ColorGray(FLAGS_b));
+      o_imgs[i]->magick(i_img.magick());
+      o_imgs[i]->type(Magick::BilevelType);
+    }
+    // Fill output images
+    output(i_img, mfset, fg_comp, o_imgs);
+    for (size_t i = 0; i < o_imgs.size(); ++i) {
+      char fname[1024];
+      if (FLAGS_m) { sprintf(fname, "%s_%lu.png", FLAGS_o.c_str(), i+1); }
+      else { sprintf(fname, "%s", FLAGS_o.c_str()); }
+      o_imgs[i]->quantizeColors(256);
+      o_imgs[i]->write(fname);
+      delete o_imgs[i];
+    }
   } catch (Magick::Exception &error) {
     LOG(ERROR) << "Output image write failed: " << error.what();
     return 1;
